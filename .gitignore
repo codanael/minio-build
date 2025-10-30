@@ -1,0 +1,23 @@
+# Build artifacts
+minio-*
+*.tar.gz
+*.zip
+*.sha256
+minio-src/
+
+# Artifacts directory
+artifacts/
+
+# Release notes
+release-notes.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

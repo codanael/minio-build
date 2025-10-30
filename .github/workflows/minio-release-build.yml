@@ -1,0 +1,257 @@
+name: MinIO Release Build
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC to check for new releases
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      minio_version:
+        description: 'MinIO version to build (e.g., RELEASE.2024-10-29T16-01-48Z). Leave empty to use latest.'
+        required: false
+        type: string
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should_build: ${{ steps.check-build.outputs.should_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest MinIO release
+        id: get-version
+        run: |
+          if [ -n "${{ github.event.inputs.minio_version }}" ]; then
+            VERSION="${{ github.event.inputs.minio_version }}"
+            echo "Using manual version: $VERSION"
+          else
+            VERSION=$(curl -s https://api.github.com/repos/minio/minio/releases/latest | jq -r .tag_name)
+            echo "Latest MinIO version: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if version already built
+        id: check-build
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          # Check if release already exists in our repo
+          if gh release view "$VERSION" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Version $VERSION already built"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION needs to be built"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build-binaries:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            name: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Clone MinIO repository
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          git clone --depth 1 --branch $VERSION https://github.com/minio/minio.git minio-src
+          cd minio-src
+          echo "Cloned MinIO $VERSION"
+
+      - name: Build MinIO binary
+        run: |
+          cd minio-src
+          VERSION="${{ needs.check-release.outputs.version }}"
+
+          # Generate build flags
+          LDFLAGS=$(go run buildscripts/gen-ldflags.go)
+
+          # Build binary
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -tags kqueue -trimpath --ldflags "$LDFLAGS" -o ../minio-${{ matrix.name }}
+
+          cd ..
+
+          # Add .exe extension for Windows
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            mv minio-${{ matrix.name }} minio-${{ matrix.name }}.exe
+          fi
+
+          # Create archive
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip minio-${{ matrix.name }}.zip minio-${{ matrix.name }}.exe
+          else
+            tar czf minio-${{ matrix.name }}.tar.gz minio-${{ matrix.name }}
+          fi
+
+      - name: Generate checksums
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sha256sum minio-${{ matrix.name }}.zip > minio-${{ matrix.name }}.zip.sha256
+          else
+            sha256sum minio-${{ matrix.name }}.tar.gz > minio-${{ matrix.name }}.tar.gz.sha256
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: minio-${{ matrix.name }}
+          path: |
+            minio-${{ matrix.name }}.*
+          retention-days: 1
+
+  build-docker:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        continue-on-error: true
+
+      - name: Clone MinIO repository
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          git clone --depth 1 --branch $VERSION https://github.com/minio/minio.git minio-src
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./minio-src
+          platforms: linux/amd64,linux/arm64
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/minio:${{ needs.check-release.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/minio:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+        continue-on-error: true
+
+  create-release:
+    needs: [check-release, build-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+
+          # Create release notes
+          cat > release-notes.md << 'EOF'
+          # MinIO Build $VERSION
+
+          This release contains MinIO binaries built from the official [MinIO $VERSION](https://github.com/minio/minio/releases/tag/$VERSION) release.
+
+          ## Available Binaries
+
+          - **Linux AMD64**: `minio-linux-amd64.tar.gz`
+          - **Linux ARM64**: `minio-linux-arm64.tar.gz`
+          - **macOS AMD64**: `minio-darwin-amd64.tar.gz`
+          - **macOS ARM64**: `minio-darwin-arm64.tar.gz`
+          - **Windows AMD64**: `minio-windows-amd64.zip`
+
+          Each archive includes SHA256 checksums for verification.
+
+          ## Docker Image
+
+          Docker images are available (if Docker Hub credentials are configured):
+          ```bash
+          docker pull <username>/minio:$VERSION
+          docker pull <username>/minio:latest
+          ```
+
+          ## Installation
+
+          ### Linux/macOS
+          ```bash
+          # Download and extract
+          tar xzf minio-linux-amd64.tar.gz
+
+          # Make executable
+          chmod +x minio-linux-amd64
+
+          # Run MinIO
+          ./minio-linux-amd64 server /data
+          ```
+
+          ### Windows
+          ```powershell
+          # Extract the zip file and run
+          .\minio-windows-amd64.exe server C:\data
+          ```
+
+          ## Source
+
+          This build is based on the official MinIO source code available at:
+          https://github.com/minio/minio
+
+          ## License
+
+          MinIO is licensed under AGPLv3. See the [MinIO repository](https://github.com/minio/minio) for details.
+          EOF
+
+          # Replace $VERSION in the notes
+          sed -i "s/\$VERSION/$VERSION/g" release-notes.md
+
+          # Collect all artifacts
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec mv {} . \;
+
+          # Create release
+          gh release create "$VERSION" \
+            --title "MinIO Build $VERSION" \
+            --notes-file release-notes.md \
+            *.tar.gz *.zip *.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update latest tag
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          git tag -f latest
+          git push -f origin latest || true

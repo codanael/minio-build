@@ -1,0 +1,186 @@
+# MinIO Release Automation
+
+This repository automatically builds MinIO binaries whenever a new version is released by the official [MinIO project](https://github.com/minio/minio).
+
+## Features
+
+- **Automated Release Monitoring**: Checks daily for new MinIO releases
+- **Multi-Platform Builds**: Builds binaries for:
+  - Linux (AMD64, ARM64)
+  - macOS (AMD64, ARM64)
+  - Windows (AMD64)
+- **Docker Images**: Publishes multi-arch Docker images (optional)
+- **Checksums**: Generates SHA256 checksums for all binaries
+- **GitHub Releases**: Automatically creates releases with binaries
+
+## How It Works
+
+The GitHub Actions workflow runs daily and:
+
+1. Checks for new MinIO releases via GitHub API
+2. Verifies if the version has already been built
+3. Clones the MinIO source code at the specific release tag
+4. Builds binaries for multiple platforms using MinIO's official build process
+5. Generates checksums for verification
+6. Creates a GitHub release with all binaries
+7. Optionally builds and publishes Docker images
+
+## Setup
+
+### Required Permissions
+
+The workflow requires the following GitHub Actions permissions:
+
+- `contents: write` - To create releases
+- `packages: write` - To push Docker images (if using GHCR)
+
+These are configured in the workflow file.
+
+### Optional: Docker Hub Integration
+
+To enable Docker image publishing:
+
+1. Go to your repository Settings → Secrets and variables → Actions
+2. Add the following secrets:
+   - `DOCKER_USERNAME`: Your Docker Hub username
+   - `DOCKER_PASSWORD`: Your Docker Hub password or access token
+
+If these secrets are not configured, the workflow will skip Docker image publishing (the build will continue successfully).
+
+### Optional: GitHub Container Registry
+
+To use GitHub Container Registry instead of Docker Hub, modify the workflow to use `ghcr.io`:
+
+```yaml
+- name: Login to GitHub Container Registry
+  uses: docker/login-action@v3
+  with:
+    registry: ghcr.io
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}
+```
+
+## Usage
+
+### Automatic Builds
+
+The workflow runs automatically every day at 00:00 UTC. No manual intervention is required.
+
+### Manual Builds
+
+You can also trigger builds manually:
+
+1. Go to Actions → MinIO Release Build
+2. Click "Run workflow"
+3. Optionally specify a MinIO version (e.g., `RELEASE.2024-10-29T16-01-48Z`)
+4. Click "Run workflow"
+
+### Downloading Binaries
+
+Binaries are available in the [Releases](../../releases) section:
+
+```bash
+# Example: Download Linux AMD64 binary
+wget https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/RELEASE.2024-10-29T16-01-48Z/minio-linux-amd64.tar.gz
+
+# Verify checksum
+wget https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/RELEASE.2024-10-29T16-01-48Z/minio-linux-amd64.tar.gz.sha256
+sha256sum -c minio-linux-amd64.tar.gz.sha256
+
+# Extract and run
+tar xzf minio-linux-amd64.tar.gz
+chmod +x minio-linux-amd64
+./minio-linux-amd64 server /data
+```
+
+### Using Docker Images
+
+If Docker Hub integration is configured:
+
+```bash
+# Pull latest image
+docker pull YOUR_DOCKERHUB_USERNAME/minio:latest
+
+# Or specific version
+docker pull YOUR_DOCKERHUB_USERNAME/minio:RELEASE.2024-10-29T16-01-48Z
+
+# Run MinIO
+docker run -p 9000:9000 -p 9001:9001 \
+  -v /data:/data \
+  YOUR_DOCKERHUB_USERNAME/minio:latest \
+  server /data --console-address ":9001"
+```
+
+## Build Process
+
+The builds follow MinIO's official build process:
+
+- **Go Version**: 1.24 or later
+- **Build Command**: `CGO_ENABLED=0 go build -tags kqueue -trimpath`
+- **Build Flags**: Generated using MinIO's `buildscripts/gen-ldflags.go`
+- **Static Binaries**: All binaries are statically compiled (CGO disabled)
+
+## Repository Structure
+
+```
+.
+├── .github/
+│   └── workflows/
+│       └── minio-release-build.yml    # Main workflow
+└── README.md                           # This file
+```
+
+## Workflow Details
+
+### Jobs
+
+1. **check-release**: Determines the latest MinIO version and checks if it's already built
+2. **build-binaries**: Builds binaries for all platforms in parallel
+3. **build-docker**: Builds and publishes multi-arch Docker images
+4. **create-release**: Creates a GitHub release with all binaries
+
+### Matrix Strategy
+
+The workflow uses a matrix strategy to build for multiple platforms simultaneously:
+
+```yaml
+matrix:
+  include:
+    - goos: linux, goarch: amd64
+    - goos: linux, goarch: arm64
+    - goos: darwin, goarch: amd64
+    - goos: darwin, goarch: arm64
+    - goos: windows, goarch: amd64
+```
+
+## Troubleshooting
+
+### Workflow not running
+
+- Ensure GitHub Actions is enabled in repository settings
+- Check that the workflow file is in the correct location: `.github/workflows/`
+- Verify that the default branch has the workflow file
+
+### Build failures
+
+- Check the Actions tab for detailed logs
+- Verify Go version compatibility with MinIO
+- Ensure MinIO's build requirements haven't changed
+
+### Docker push failures
+
+- Verify `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets are set correctly
+- Check Docker Hub rate limits
+- Ensure the Docker Hub account has permission to push images
+
+## License
+
+This repository contains automation scripts only. The MinIO binaries are subject to MinIO's AGPLv3 license. See the [official MinIO repository](https://github.com/minio/minio) for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## Disclaimer
+
+This is an unofficial build repository. Production environments using these compiled binaries do so at their own risk. For official MinIO releases, visit [https://github.com/minio/minio/releases](https://github.com/minio/minio/releases).
