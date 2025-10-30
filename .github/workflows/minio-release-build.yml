@@ -88,8 +88,8 @@ jobs:
           # Generate build flags
           LDFLAGS=$(go run buildscripts/gen-ldflags.go)
 
-          # Build binary
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          # Build binary with MINIO_RELEASE set to indicate this is a release build
+          MINIO_RELEASE=RELEASE CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -tags kqueue -trimpath --ldflags "$LDFLAGS" -o ../minio-${{ matrix.name }}
 
           cd ..
