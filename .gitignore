@@ -1,7 +1,6 @@
 # Build artifacts
 minio-*
 *.tar.gz
-*.zip
 *.sha256
 minio-src/
 minio-source.tar.gz

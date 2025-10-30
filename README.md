@@ -5,10 +5,7 @@ This repository automatically builds MinIO binaries whenever a new version is re
 ## Features
 
 - **Automated Release Monitoring**: Checks daily for new MinIO releases
-- **Multi-Platform Builds**: Builds binaries for:
-  - Linux (AMD64, ARM64)
-  - macOS (AMD64, ARM64)
-  - Windows (AMD64)
+- **Linux Builds**: Builds binaries for Linux (AMD64, ARM64)
 - **Docker Images**: Publishes multi-arch Docker images to GitHub Container Registry
 - **Checksums**: Generates SHA256 checksums for all binaries
 - **GitHub Releases**: Automatically creates releases with binaries
@@ -136,22 +133,19 @@ The builds follow MinIO's official build process:
 ### Jobs
 
 1. **check-release**: Determines the latest MinIO version and checks if it's already built
-2. **build-binaries**: Builds binaries for all platforms in parallel
+2. **build-binaries**: Builds Linux binaries for multiple architectures in parallel
 3. **build-docker**: Builds and publishes multi-arch Docker images
 4. **create-release**: Creates a GitHub release with all binaries
 
 ### Matrix Strategy
 
-The workflow uses a matrix strategy to build for multiple platforms simultaneously:
+The workflow uses a matrix strategy to build for Linux architectures simultaneously:
 
 ```yaml
 matrix:
   include:
     - goos: linux, goarch: amd64
     - goos: linux, goarch: arm64
-    - goos: darwin, goarch: amd64
-    - goos: darwin, goarch: arm64
-    - goos: windows, goarch: amd64
 ```
 
 ## Troubleshooting

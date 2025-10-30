@@ -64,15 +64,6 @@ jobs:
           - goos: linux
             goarch: arm64
             name: linux-arm64
-          - goos: darwin
-            goarch: amd64
-            name: darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            name: darwin-arm64
-          - goos: windows
-            goarch: amd64
-            name: windows-amd64
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -110,25 +101,12 @@ jobs:
 
           cd ..
 
-          # Add .exe extension for Windows
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            mv minio-${{ matrix.name }} minio-${{ matrix.name }}.exe
-          fi
-
           # Create archive
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip minio-${{ matrix.name }}.zip minio-${{ matrix.name }}.exe
-          else
-            tar czf minio-${{ matrix.name }}.tar.gz minio-${{ matrix.name }}
-          fi
+          tar czf minio-${{ matrix.name }}.tar.gz minio-${{ matrix.name }}
 
       - name: Generate checksums
         run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            sha256sum minio-${{ matrix.name }}.zip > minio-${{ matrix.name }}.zip.sha256
-          else
-            sha256sum minio-${{ matrix.name }}.tar.gz > minio-${{ matrix.name }}.tar.gz.sha256
-          fi
+          sha256sum minio-${{ matrix.name }}.tar.gz > minio-${{ matrix.name }}.tar.gz.sha256
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -227,9 +205,6 @@ jobs:
 
           - **Linux AMD64**: `minio-linux-amd64.tar.gz`
           - **Linux ARM64**: `minio-linux-arm64.tar.gz`
-          - **macOS AMD64**: `minio-darwin-amd64.tar.gz`
-          - **macOS ARM64**: `minio-darwin-arm64.tar.gz`
-          - **Windows AMD64**: `minio-windows-amd64.zip`
 
           Each archive includes SHA256 checksums for verification.
 
@@ -251,7 +226,7 @@ jobs:
 
           ## Installation
 
-          ### Linux/macOS
+          ### Linux
           ```bash
           # Download and extract
           tar xzf minio-linux-amd64.tar.gz
@@ -261,12 +236,6 @@ jobs:
 
           # Run MinIO
           ./minio-linux-amd64 server /data
-          ```
-
-          ### Windows
-          ```powershell
-          # Extract the zip file and run
-          .\minio-windows-amd64.exe server C:\data
           ```
 
           ## Source
@@ -285,13 +254,13 @@ jobs:
           sed -i "s|\$REPO|$REPO|g" release-notes.md
 
           # Collect all artifacts
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec mv {} . \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec mv {} . \;
 
           # Create release
           gh release create "$VERSION" \
             --title "MinIO Build $VERSION" \
             --notes-file release-notes.md \
-            *.tar.gz *.zip *.sha256
+            *.tar.gz *.sha256
         env:
           GH_TOKEN: ${{ github.token }}
 
