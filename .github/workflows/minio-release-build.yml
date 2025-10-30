@@ -70,32 +70,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Download MinIO source archive
+      - name: Clone MinIO repository
         run: |
           VERSION="${{ needs.check-release.outputs.version }}"
-          echo "Downloading MinIO $VERSION source archive"
+          echo "Cloning MinIO repository at tag $VERSION"
 
-          # Download source tarball from GitHub release
-          curl -L -o minio-source.tar.gz \
-            "https://github.com/minio/minio/archive/refs/tags/${VERSION}.tar.gz"
+          # Clone the specific release tag with minimal history
+          git clone --depth 1 --branch "$VERSION" https://github.com/minio/minio.git minio-src
 
-          # Extract the archive
-          tar xzf minio-source.tar.gz
-
-          # Rename extracted directory to minio-src for consistency
-          mv minio-${VERSION} minio-src
-
-          # Initialize git repository for build scripts
-          cd minio-src
-          git init
-          git config user.email "actions@github.com"
-          git config user.name "GitHub Actions"
-          git add .
-          git commit -m "Release ${VERSION}"
-          git tag "${VERSION}"
-          cd ..
-
-          echo "Downloaded and extracted MinIO $VERSION"
+          echo "Cloned MinIO $VERSION"
 
       - name: Build MinIO binary
         run: |
