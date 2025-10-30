@@ -4,6 +4,7 @@ minio-*
 *.zip
 *.sha256
 minio-src/
+minio-source.tar.gz
 
 # Artifacts directory
 artifacts/
