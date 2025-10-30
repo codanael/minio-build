@@ -85,11 +85,15 @@ jobs:
           cd minio-src
           VERSION="${{ needs.check-release.outputs.version }}"
 
+          # Set MINIO_RELEASE before generating ldflags
+          # gen-ldflags.go checks this to determine if it's a release or development build
+          export MINIO_RELEASE=RELEASE
+
           # Generate build flags
           LDFLAGS=$(go run buildscripts/gen-ldflags.go)
 
-          # Build binary with MINIO_RELEASE set to indicate this is a release build
-          MINIO_RELEASE=RELEASE CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          # Build binary
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -tags kqueue -trimpath --ldflags "$LDFLAGS" -o ../minio-${{ matrix.name }}
 
           cd ..
