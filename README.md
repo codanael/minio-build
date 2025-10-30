@@ -9,7 +9,7 @@ This repository automatically builds MinIO binaries whenever a new version is re
   - Linux (AMD64, ARM64)
   - macOS (AMD64, ARM64)
   - Windows (AMD64)
-- **Docker Images**: Publishes multi-arch Docker images (optional)
+- **Docker Images**: Publishes multi-arch Docker images to GitHub Container Registry
 - **Checksums**: Generates SHA256 checksums for all binaries
 - **GitHub Releases**: Automatically creates releases with binaries
 
@@ -22,8 +22,8 @@ The GitHub Actions workflow runs daily and:
 3. Clones the MinIO source code at the specific release tag
 4. Builds binaries for multiple platforms using MinIO's official build process
 5. Generates checksums for verification
-6. Creates a GitHub release with all binaries
-7. Optionally builds and publishes Docker images
+6. Builds and publishes multi-arch Docker images to GitHub Container Registry
+7. Creates a GitHub release with all binaries and Docker image links
 
 ## Setup
 
@@ -32,33 +32,22 @@ The GitHub Actions workflow runs daily and:
 The workflow requires the following GitHub Actions permissions:
 
 - `contents: write` - To create releases
-- `packages: write` - To push Docker images (if using GHCR)
+- `packages: write` - To push Docker images to GitHub Container Registry
 
-These are configured in the workflow file.
+These are configured in the workflow file and are automatically available via `GITHUB_TOKEN`.
 
-### Optional: Docker Hub Integration
+### GitHub Container Registry Setup
 
-To enable Docker image publishing:
+Docker images are automatically published to GitHub Container Registry (GHCR). No additional secrets or configuration is required.
 
-1. Go to your repository Settings → Secrets and variables → Actions
-2. Add the following secrets:
-   - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_PASSWORD`: Your Docker Hub password or access token
+By default, GHCR packages are private. To make your MinIO images publicly accessible:
 
-If these secrets are not configured, the workflow will skip Docker image publishing (the build will continue successfully).
-
-### Optional: GitHub Container Registry
-
-To use GitHub Container Registry instead of Docker Hub, modify the workflow to use `ghcr.io`:
-
-```yaml
-- name: Login to GitHub Container Registry
-  uses: docker/login-action@v3
-  with:
-    registry: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
-```
+1. Go to your repository's main page
+2. Click on "Packages" in the right sidebar (after the first build)
+3. Click on the `minio-build` package
+4. Click "Package settings"
+5. Scroll down to "Danger Zone"
+6. Click "Change visibility" and select "Public"
 
 ## Usage
 
@@ -95,20 +84,32 @@ chmod +x minio-linux-amd64
 
 ### Using Docker Images
 
-If Docker Hub integration is configured:
+Docker images are published to GitHub Container Registry:
 
 ```bash
 # Pull latest image
-docker pull YOUR_DOCKERHUB_USERNAME/minio:latest
+docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:latest
 
 # Or specific version
-docker pull YOUR_DOCKERHUB_USERNAME/minio:RELEASE.2024-10-29T16-01-48Z
+docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:RELEASE.2024-10-29T16-01-48Z
 
 # Run MinIO
 docker run -p 9000:9000 -p 9001:9001 \
   -v /data:/data \
-  YOUR_DOCKERHUB_USERNAME/minio:latest \
+  ghcr.io/YOUR_USERNAME/YOUR_REPO:latest \
   server /data --console-address ":9001"
+```
+
+**Note**: Replace `YOUR_USERNAME/YOUR_REPO` with your actual GitHub repository path (e.g., `octocat/minio-build`).
+
+If the package is private, you'll need to authenticate first:
+
+```bash
+# Login to GHCR
+echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+
+# Then pull the image
+docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:latest
 ```
 
 ## Build Process
@@ -169,9 +170,10 @@ matrix:
 
 ### Docker push failures
 
-- Verify `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets are set correctly
-- Check Docker Hub rate limits
-- Ensure the Docker Hub account has permission to push images
+- Ensure the workflow has `packages: write` permission
+- Check that `GITHUB_TOKEN` has the necessary permissions
+- Verify that GitHub Container Registry is accessible
+- Check the Actions logs for specific error messages
 
 ## License
 

@@ -132,37 +132,50 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.should_build == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.build-push.outputs.digest }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-        continue-on-error: true
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clone MinIO repository
         run: |
           VERSION="${{ needs.check-release.outputs.version }}"
           git clone --depth 1 --branch $VERSION https://github.com/minio/minio.git minio-src
 
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ needs.check-release.outputs.version }}
+            type=raw,value=latest
+
       - name: Build and push Docker image
+        id: build-push
         uses: docker/build-push-action@v5
         with:
           context: ./minio-src
           platforms: linux/amd64,linux/arm64
-          push: ${{ secrets.DOCKER_USERNAME != '' }}
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/minio:${{ needs.check-release.outputs.version }}
-            ${{ secrets.DOCKER_USERNAME }}/minio:latest
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-        continue-on-error: true
 
   create-release:
-    needs: [check-release, build-binaries]
+    needs: [check-release, build-binaries, build-docker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -200,10 +213,18 @@ jobs:
 
           ## Docker Image
 
-          Docker images are available (if Docker Hub credentials are configured):
+          Docker images are available on GitHub Container Registry:
           ```bash
-          docker pull <username>/minio:$VERSION
-          docker pull <username>/minio:latest
+          docker pull ghcr.io/$REPO:$VERSION
+          docker pull ghcr.io/$REPO:latest
+          ```
+
+          Or run directly:
+          ```bash
+          docker run -p 9000:9000 -p 9001:9001 \
+            -v /data:/data \
+            ghcr.io/$REPO:$VERSION \
+            server /data --console-address ":9001"
           ```
 
           ## Installation
@@ -236,8 +257,10 @@ jobs:
           MinIO is licensed under AGPLv3. See the [MinIO repository](https://github.com/minio/minio) for details.
           EOF
 
-          # Replace $VERSION in the notes
+          # Replace variables in the notes
+          REPO="${{ github.repository }}"
           sed -i "s/\$VERSION/$VERSION/g" release-notes.md
+          sed -i "s|\$REPO|$REPO|g" release-notes.md
 
           # Collect all artifacts
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec mv {} . \;
