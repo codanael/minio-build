@@ -15,11 +15,10 @@ The GitHub Actions workflow runs daily and:
 
 1. Checks for new MinIO releases via GitHub API
 2. Verifies if the version has already been built
-3. Downloads the MinIO source archive from the specific release
-4. Initializes a git repository with proper tags (required by MinIO's build scripts)
-5. Builds binaries for Linux (AMD64, ARM64) using MinIO's official build process
-6. Generates checksums for verification
-7. Creates a GitHub release with all binaries
+3. Clones the MinIO repository at the specific release tag
+4. Builds binaries for Linux (AMD64, ARM64) using MinIO's official build process
+5. Generates checksums for verification
+6. Creates a GitHub release with all binaries
 
 ## Setup
 
