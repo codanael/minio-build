@@ -6,7 +6,6 @@ This repository automatically builds MinIO binaries whenever a new version is re
 
 - **Automated Release Monitoring**: Checks daily for new MinIO releases
 - **Linux Builds**: Builds binaries for Linux (AMD64, ARM64)
-- **Docker Images**: Publishes multi-arch Docker images to GitHub Container Registry
 - **Checksums**: Generates SHA256 checksums for all binaries
 - **GitHub Releases**: Automatically creates releases with binaries
 
@@ -20,9 +19,7 @@ The GitHub Actions workflow runs daily and:
 4. Initializes a git repository with proper tags (required by MinIO's build scripts)
 5. Builds binaries for Linux (AMD64, ARM64) using MinIO's official build process
 6. Generates checksums for verification
-7. Downloads MinIO's Dockerfile and prepares pre-built binaries
-8. Builds and publishes multi-arch Docker images to GitHub Container Registry
-9. Creates a GitHub release with all binaries and Docker image links
+7. Creates a GitHub release with all binaries
 
 ## Setup
 
@@ -31,22 +28,8 @@ The GitHub Actions workflow runs daily and:
 The workflow requires the following GitHub Actions permissions:
 
 - `contents: write` - To create releases
-- `packages: write` - To push Docker images to GitHub Container Registry
 
-These are configured in the workflow file and are automatically available via `GITHUB_TOKEN`.
-
-### GitHub Container Registry Setup
-
-Docker images are automatically published to GitHub Container Registry (GHCR). No additional secrets or configuration is required.
-
-By default, GHCR packages are private. To make your MinIO images publicly accessible:
-
-1. Go to your repository's main page
-2. Click on "Packages" in the right sidebar (after the first build)
-3. Click on the `minio-build` package
-4. Click "Package settings"
-5. Scroll down to "Danger Zone"
-6. Click "Change visibility" and select "Public"
+This is configured in the workflow file and is automatically available via `GITHUB_TOKEN`.
 
 ## Usage
 
@@ -81,36 +64,6 @@ chmod +x minio-linux-amd64
 ./minio-linux-amd64 server /data
 ```
 
-### Using Docker Images
-
-Docker images are published to GitHub Container Registry:
-
-```bash
-# Pull latest image
-docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:latest
-
-# Or specific version
-docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:RELEASE.2024-10-29T16-01-48Z
-
-# Run MinIO
-docker run -p 9000:9000 -p 9001:9001 \
-  -v /data:/data \
-  ghcr.io/YOUR_USERNAME/YOUR_REPO:latest \
-  server /data --console-address ":9001"
-```
-
-**Note**: Replace `YOUR_USERNAME/YOUR_REPO` with your actual GitHub repository path (e.g., `octocat/minio-build`).
-
-If the package is private, you'll need to authenticate first:
-
-```bash
-# Login to GHCR
-echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-
-# Then pull the image
-docker pull ghcr.io/YOUR_USERNAME/YOUR_REPO:latest
-```
-
 ## Build Process
 
 The builds follow MinIO's official build process:
@@ -136,7 +89,7 @@ The builds follow MinIO's official build process:
 
 1. **check-release**: Determines the latest MinIO version and checks if it's already built
 2. **build-binaries**: Builds Linux binaries for multiple architectures in parallel
-3. **create-release**: Builds and publishes Docker images, then creates a GitHub release with all binaries
+3. **create-release**: Creates a GitHub release with all binaries
 
 ### Matrix Strategy
 
@@ -162,13 +115,6 @@ matrix:
 - Check the Actions tab for detailed logs
 - Verify Go version compatibility with MinIO
 - Ensure MinIO's build requirements haven't changed
-
-### Docker push failures
-
-- Ensure the workflow has `packages: write` permission
-- Check that `GITHUB_TOKEN` has the necessary permissions
-- Verify that GitHub Container Registry is accessible
-- Check the Actions logs for specific error messages
 
 ## License
 
