@@ -85,6 +85,16 @@ jobs:
           # Rename extracted directory to minio-src for consistency
           mv minio-${VERSION} minio-src
 
+          # Initialize git repository for build scripts
+          cd minio-src
+          git init
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add .
+          git commit -m "Release ${VERSION}"
+          git tag "${VERSION}"
+          cd ..
+
           echo "Downloaded and extracted MinIO $VERSION"
 
       - name: Build MinIO binary
@@ -150,6 +160,16 @@ jobs:
 
           # Rename extracted directory to minio-src for consistency
           mv minio-${VERSION} minio-src
+
+          # Initialize git repository for build scripts
+          cd minio-src
+          git init
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add .
+          git commit -m "Release ${VERSION}"
+          git tag "${VERSION}"
+          cd ..
 
           echo "Downloaded and extracted MinIO $VERSION"
 
